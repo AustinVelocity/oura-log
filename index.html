@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Oura Daily Log</title>
+<style>
+  :root{color-scheme:light}
+  body{font-family:-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;max-width:560px;margin:0 auto;padding:16px;color:#1a1a1a;background:#f7f7f8}
+  h2{font-size:20px;margin:4px 0 6px}
+  .fld{background:#fff;border:1px solid #e5e5e7;border-radius:10px;padding:12px 14px;margin:10px 0}
+  label.q{display:block;font-weight:600;font-size:15px;margin-bottom:8px}
+  .opt{display:block;padding:6px 0;font-size:15px}
+  .opt input{margin-right:8px;transform:scale(1.2);vertical-align:middle}
+  input[type=text],input[type=time],input[type=number],textarea,input[type=date]{width:100%;box-sizing:border-box;padding:10px;font-size:16px;border:1px solid #ccc;border-radius:8px}
+  textarea{min-height:70px}
+  .datebar{position:sticky;top:0;z-index:5}
+  button{width:100%;padding:14px;font-size:17px;font-weight:600;color:#fff;background:#2E7D46;border:0;border-radius:10px;margin:14px 0;cursor:pointer}
+  button:disabled{opacity:.5}
+  #status{text-align:center;font-size:15px;min-height:22px;padding:6px}
+  .hint{color:#666;font-size:12px;margin-top:6px}
+</style>
+</head>
+<body>
+  <h2>Oura Daily Log</h2>
+  <div class="datebar fld">
+    <label class="q">Which morning did you wake up?</label>
+    <input type="date" id="logdate">
+    <div class="hint">This is the Oura sleep date (last night's sleep = today). Answer every question below for the day and night that led into this sleep. Pick a past date to backfill; if you already logged it, it loads in so you can edit and re-save.</div>
+  </div>
+  <div id="fields"></div>
+  <button id="saveBtn">Save</button>
+  <div id="status">Loading&hellip;</div>
+
+<script>
+var EXEC='https://script.google.com/macros/s/AKfycbwl0C-prbRTGoe4MQANMWGH50SOuJc4ykJVzNxLDn5QUhGWI1RSI-q8d824bZhtLn96/exec';
+
+var FIELDS=[
+ {k:'worked',label:'Did you work the day before?',type:'radio',opts:['Yes','No']},
+ {k:'modafinil',label:'Modafinil the day before',type:'checks',opts:['None','ArmodaXL 250mg','Modafil MD 200','ModaXL 300mg','Modacare Elite (200 moda/50 armoda)','Modalert 200','Modacare MD 200 (sublingual)','Waklert']},
+ {k:'modafinil_mg',label:'Modafinil total mg (day before)',type:'number'},
+ {k:'dose1',label:'Dose 1 time',type:'time'},
+ {k:'dose2',label:'Dose 2 time',type:'time'},
+ {k:'dose3',label:'Dose 3 time',type:'time'},
+ {k:'caffeine_mg',label:'Caffeine the day before (mg)',type:'number'},
+ {k:'caffeine_last',label:'Caffeine - last time (day before)',type:'time'},
+ {k:'last_meal',label:'Last meal - time finished (evening before)',type:'time'},
+ {k:'dinner_size',label:'Dinner size (evening before)',type:'radio',opts:['Small','Medium','Large']},
+ {k:'sleep_aids',label:'Sleep aids that night',type:'checks',opts:['None','Triple Magnesium Complex x2 (nightly)','Medterra Sound Asleep (50mg CBD / 5mg THC)','Medterra Fast Asleep (2mg CBN)','Stilnox CR 12.5mg (zolpidem)','Genius Sleep Aid']},
+ {k:'apollo',label:'Apollo that night?',type:'radio',opts:['Yes','No']},
+ {k:'nucalm',label:'NuCalm that night',type:'radio',opts:['Off','Part of night','All night']},
+ {k:'where_slept',label:'Where you slept that night',type:'radio',opts:['Own bed (home)','Away - different time zone','Away - same time zone']},
+ {k:'room_temp',label:'Room temperature that night',type:'radio',opts:['Cool (~65F)','Comfortable','Warm','Hot']},
+ {k:'shared_bed',label:'Shared bed that night?',type:'radio',opts:['Alone','Shared']},
+ {k:'stress',label:'Work / stress level the day before',type:'radio',opts:['Low','Normal','High']},
+ {k:'notes',label:'Notes',type:'textarea'}
+];
+
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');}
+function el(id){return document.getElementById(id);}
+function setStatus(t){el('status').textContent=t;}
+
+function render(){
+  var h='';
+  for(var i=0;i<FIELDS.length;i++){var f=FIELDS[i];h+='<div class="fld"><label class="q">'+esc(f.label)+'</label>';
+    if(f.type==='radio'||f.type==='checks'){var it=(f.type==='radio')?'radio':'checkbox';
+      for(var j=0;j<f.opts.length;j++){var o=f.opts[j];h+='<label class="opt"><input type="'+it+'" name="'+f.k+'" value="'+esc(o)+'">'+esc(o)+'</label>';}
+    } else if(f.type==='time'){h+='<input type="time" id="'+f.k+'">';
+    } else if(f.type==='number'){h+='<input type="number" inputmode="numeric" id="'+f.k+'">';
+    } else if(f.type==='textarea'){h+='<textarea id="'+f.k+'"></textarea>';
+    } else {h+='<input type="text" id="'+f.k+'">';}
+    h+='</div>';
+  }
+  el('fields').innerHTML=h;
+}
+
+function pad(n){return (n<10?'0':'')+n;}
+function todayStr(){var d=new Date();return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());}
+
+function clearForm(){
+  for(var i=0;i<FIELDS.length;i++){var f=FIELDS[i];
+    if(f.type==='radio'||f.type==='checks'){var els=document.getElementsByName(f.k);for(var j=0;j<els.length;j++)els[j].checked=false;}
+    else{var e=el(f.k);if(e)e.value='';}
+  }
+}
+
+function fill(o){
+  clearForm();
+  if(o&&o.found){
+    for(var i=0;i<FIELDS.length;i++){var f=FIELDS[i];var val=o[f.k];if(val==null)val='';
+      if(f.type==='radio'||f.type==='checks'){var parts=String(val).split(', ');var els=document.getElementsByName(f.k);
+        for(var j=0;j<els.length;j++){if(parts.indexOf(els[j].value)>=0)els[j].checked=true;}}
+      else{var e=el(f.k);if(e)e.value=val;}
+    }
+    setStatus('Loaded your saved entry — edit and Save to update.');
+  } else {
+    setStatus('New entry — fill in and Save.');
+  }
+}
+
+function gather(){
+  var data={date:el('logdate').value};
+  for(var i=0;i<FIELDS.length;i++){var f=FIELDS[i];
+    if(f.type==='radio'){var els=document.getElementsByName(f.k);var v='';for(var j=0;j<els.length;j++)if(els[j].checked)v=els[j].value;data[f.k]=v;}
+    else if(f.type==='checks'){var e2=document.getElementsByName(f.k);var arr=[];for(var k=0;k<e2.length;k++)if(e2[k].checked)arr.push(e2[k].value);data[f.k]=arr;}
+    else{var e=el(f.k);data[f.k]=e?e.value:'';}
+  }
+  return data;
+}
+
+function loadDate(){
+  var d=el('logdate').value;if(!d)return;
+  setStatus('Loading '+d+'…');
+  fetch(EXEC+'?action=load&date='+encodeURIComponent(d),{credentials:'omit'})
+    .then(function(r){return r.json();})
+    .then(fill)
+    .catch(function(e){setStatus('Load error — check your connection and reload. ('+e.message+')');});
+}
+
+function save(){
+  var data=gather();
+  if(!data.date){setStatus('Pick a date first.');return;}
+  setStatus('Saving…');
+  el('saveBtn').disabled=true;
+  fetch(EXEC+'?action=formsave',{
+    method:'POST',
+    credentials:'omit',
+    headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body:JSON.stringify(data)
+  })
+    .then(function(r){return r.json();})
+    .then(function(res){el('saveBtn').disabled=false;setStatus('Saved '+(res.date||data.date)+' ✓');})
+    .catch(function(e){el('saveBtn').disabled=false;setStatus('Save error — try again. ('+e.message+')');});
+}
+
+render();
+el('logdate').value=todayStr();
+el('logdate').addEventListener('change',loadDate);
+el('saveBtn').addEventListener('click',save);
+loadDate();
+</script>
+</body>
+</html>
