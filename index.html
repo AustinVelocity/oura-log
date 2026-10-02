@@ -19,14 +19,21 @@
   button:disabled{opacity:.5}
   #status{text-align:center;font-size:15px;min-height:22px;padding:6px}
   .hint{color:#666;font-size:12px;margin-top:6px}
+  .assign{border-radius:10px;padding:12px 14px;margin:10px 0;font-weight:700;font-size:16px;text-align:center}
+  .assign.use{background:#E6F4EA;border:1px solid #2E7D46;color:#1B5E2A}
+  .assign.skip{background:#EEF1F5;border:1px solid #b9c2cf;color:#33455c}
+  .assign small{display:block;font-weight:500;font-size:12px;margin-top:4px;opacity:.8}
+  .entryassign{font-size:12px;color:#555;margin-top:8px;font-weight:600}
 </style>
 </head>
 <body>
   <h2>Oura Daily Log</h2>
+  <div id="tonight" class="assign skip">&nbsp;</div>
   <div class="datebar fld">
     <label class="q">Which morning did you wake up?</label>
     <input type="date" id="logdate">
     <div class="hint">This is the Oura sleep date (last night's sleep = today). Answer every question below for the day and night that led into this sleep. Pick a past date to backfill; if you already logged it, it loads in so you can edit and re-save.</div>
+    <div class="entryassign" id="entryassign"></div>
   </div>
   <div id="fields"></div>
   <button id="saveBtn">Save</button>
@@ -34,6 +41,24 @@
 
 <script>
 var EXEC='https://script.google.com/macros/s/AKfycbwl0C-prbRTGoe4MQANMWGH50SOuJc4ykJVzNxLDn5QUhGWI1RSI-q8d824bZhtLn96/exec';
+
+// Randomized A/B schedule for Apollo + NuCalm. Key = night you go to bed (yyyy-mm-dd). ON=use both, OFF=skip both.
+var SCHED={"2026-10-03":"ON","2026-10-04":"ON","2026-10-05":"OFF","2026-10-06":"ON","2026-10-07":"OFF","2026-10-08":"OFF","2026-10-09":"ON","2026-10-10":"OFF","2026-10-11":"OFF","2026-10-12":"ON","2026-10-13":"ON","2026-10-14":"OFF","2026-10-15":"OFF","2026-10-16":"ON","2026-10-17":"ON","2026-10-18":"OFF","2026-10-19":"ON","2026-10-20":"OFF","2026-10-21":"OFF","2026-10-22":"ON","2026-10-23":"ON","2026-10-24":"OFF","2026-10-25":"OFF","2026-10-26":"ON","2026-10-27":"OFF","2026-10-28":"ON","2026-10-29":"ON","2026-10-30":"OFF"};
+function dnice(ds){var p=ds.split('-');var d=new Date(+p[0],+p[1]-1,+p[2]);return d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});}
+function prevDayStr(ds){var p=ds.split('-');var d=new Date(+p[0],+p[1]-1,+p[2]);d.setDate(d.getDate()-1);return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());}
+function renderTonight(){var t=todayStr();var a=SCHED[t];var box=el('tonight');if(!box)return;
+  if(!a){box.className='assign skip';
+    if(t<'2026-10-03'){box.innerHTML='Randomized A/B trial starts the night of '+dnice('2026-10-03')+'. Log as usual until then.';}
+    else{box.innerHTML='Randomized A/B window complete — log as usual.';}
+    return;}
+  if(a==='ON'){box.className='assign use';box.innerHTML='Tonight ('+dnice(t)+'): USE Apollo + NuCalm<small>Per your randomized A/B schedule</small>';}
+  else{box.className='assign skip';box.innerHTML='Tonight ('+dnice(t)+'): SKIP Apollo + NuCalm<small>Per your randomized A/B schedule</small>';}
+}
+function renderEntryAssign(){var e=el('entryassign');if(!e)return;var ld=el('logdate').value;if(!ld){e.textContent='';return;}
+  var night=prevDayStr(ld);var a=SCHED[night];
+  if(!a){e.textContent='';return;}
+  e.textContent='A/B assignment for this night ('+dnice(night)+'): '+(a==='ON'?'USE Apollo + NuCalm':'SKIP both')+'. Log what you actually did below.';
+}
 
 var FIELDS=[
  {k:'worked',label:'Did you work the day before?',type:'radio',opts:['Yes','No']},
@@ -135,8 +160,10 @@ function save(){
 
 render();
 el('logdate').value=todayStr();
-el('logdate').addEventListener('change',loadDate);
+el('logdate').addEventListener('change',function(){loadDate();renderEntryAssign();});
 el('saveBtn').addEventListener('click',save);
+renderTonight();
+renderEntryAssign();
 loadDate();
 </script>
 </body>
